@@ -106,10 +106,9 @@ const PlayerDiv = styled.div<PlayerProps>`
   align-items: center;
 `;
 
-const Player = styled.div`
+const Player = styled.img`
   width: 40px;
   height: 40px;
-  background-color: red;
 `;
 
 const PlayerName = styled.p`
@@ -245,7 +244,7 @@ const Players = () => {
               </ChatBubble>
             )}
             <PlayerName>{p.nickname}</PlayerName>
-            <Player />
+            <Player src="/image/moremi.png" />
           </PlayerDiv>
         ))}
     </>
