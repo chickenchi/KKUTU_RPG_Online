@@ -11,6 +11,7 @@ import { playerAxisAtom, playerIdAtom, playerMapAtom } from "@/atoms/account";
 import { useAtom } from "jotai";
 import { sendMessage } from "./game_components/chat_db/chat";
 import { db } from "@/common_components/firebase";
+import { isMobile } from "react-device-detect";
 
 const GameBackgroundDiv = styled.div`
   width: 100%;
@@ -503,6 +504,117 @@ const Chat = () => {
   );
 };
 
+const PadContainer = styled.div`
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+`;
+
+const Row = styled.div`
+  display: flex;
+  gap: 10px;
+`;
+
+const ArrowButton = styled.button`
+  width: 60px;
+  height: 60px;
+  background: #333;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  font-size: 24px;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:active {
+    background: #555;
+    transform: scale(0.95);
+  }
+`;
+
+const MobileArrowPad = () => {
+  const isJumpingRef = useRef<boolean>(false);
+  const [playerId] = useAtom(playerIdAtom);
+
+  const jumpPlayer = async (playerId: string) => {
+    const JUMP_HEIGHT = 100; // 최대 높이
+    const JUMP_SPEED = 10; // 한 프레임에 올라가는 거리
+
+    let currentHeight = 0;
+    let goingUp = true; // 상승 상태 플래그
+
+    const jumpInterval = setInterval(async () => {
+      if (!goingUp) {
+        clearInterval(jumpInterval); // 최대 높이에 도달하면 종료
+        isJumpingRef.current = false;
+        return;
+      }
+
+      currentHeight += JUMP_SPEED;
+      if (currentHeight >= JUMP_HEIGHT) {
+        currentHeight = JUMP_HEIGHT;
+        goingUp = false;
+      }
+
+      // 현재 높이를 서버에 업데이트
+      await updatePlayerLocation(playerId, "jump"); // y값 직접 전달
+    }, 16); // 약 60FPS
+  };
+
+  const jump = async () => {
+    if (!isJumpingRef.current && (await isPlayerFloor(playerId))) {
+      isJumpingRef.current = true;
+      jumpPlayer(playerId);
+    }
+  };
+
+  const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
+
+  const startMove = (direction: "left" | "right") => {
+    if (intervalId) return;
+
+    const id = setInterval(() => {
+      updatePlayerLocation(playerId, direction);
+    }, 100);
+
+    setIntervalId(id);
+  };
+
+  const stopMove = () => {
+    if (intervalId) {
+      clearInterval(intervalId);
+      setIntervalId(null);
+    }
+  };
+
+  return (
+    <PadContainer>
+      <Row>
+        <ArrowButton onPointerDown={() => jump()}>▲</ArrowButton>
+      </Row>
+      <Row>
+        <ArrowButton
+          onPointerDown={() => startMove("left")}
+          onMouseUp={stopMove}
+        >
+          ◀
+        </ArrowButton>
+        <ArrowButton
+          onPointerDown={() => startMove("right")}
+          onMouseUp={stopMove}
+        >
+          ▶
+        </ArrowButton>
+      </Row>
+    </PadContainer>
+  );
+};
+
 const Game = () => {
   const [playerId] = useAtom(playerIdAtom);
   const [playerMap] = useAtom(playerMapAtom);
@@ -543,6 +655,8 @@ const Game = () => {
       )}
       {/* 채팅 */}
       {openChat && <Chat />}
+      {/* 모바일 UI */}
+      {!isMobile && <MobileArrowPad />}
     </GameBackgroundDiv>
   );
 };

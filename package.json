@@ -15,6 +15,7 @@
     "firebase": "^12.4.0",
     "jotai": "^2.15.0",
     "react": "^19.1.1",
+    "react-device-detect": "^2.2.3",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.4",
     "styled-components": "^6.1.19"
