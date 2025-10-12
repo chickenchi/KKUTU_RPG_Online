@@ -656,7 +656,7 @@ const Game = () => {
       {/* 채팅 */}
       {openChat && <Chat />}
       {/* 모바일 UI */}
-      {!isMobile && <MobileArrowPad />}
+      {isMobile && <MobileArrowPad />}
     </GameBackgroundDiv>
   );
 };
