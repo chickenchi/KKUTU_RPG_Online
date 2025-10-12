@@ -1,0 +1,551 @@
+// src/App.tsx
+import React, { useEffect, useRef, useState } from "react";
+import styled from "styled-components";
+import { PlayerFinder } from "./game_components/element_settings";
+import { get, getDatabase, onValue, ref, set, update } from "firebase/database";
+import {
+  isPlayerFloor,
+  updatePlayerLocation,
+} from "./game_components/player_db/player";
+import { playerAxisAtom, playerIdAtom, playerMapAtom } from "@/atoms/account";
+import { useAtom } from "jotai";
+import { sendMessage } from "./game_components/chat_db/chat";
+import { db } from "@/common_components/firebase";
+
+const GameBackgroundDiv = styled.div`
+  width: 100%;
+  height: 100%;
+
+  display: flex;
+  flex-direction: column;
+`;
+
+const Floor = styled.div<{ height: number }>`
+  position: absolute;
+  bottom: 0;
+
+  background-color: green;
+
+  width: 100%;
+  height: ${({ height }) => `${height}px`};
+`;
+
+const Portal = styled.div<{ x: number; y: number }>`
+  position: absolute;
+  left: ${({ x }) => `${x}px`};
+  bottom: ${({ y }) => `${y + 60}px`};
+
+  border-radius: 50%;
+  background: radial-gradient(circle at center, #ff00ff, #800080 70%);
+  animation: portalGlow 1.5s infinite alternate;
+  cursor: pointer;
+
+  @keyframes portalGlow {
+    0% {
+      transform: scale(1.3);
+      box-shadow: 0 0 15px 5px rgba(172, 128, 203, 0.863);
+    }
+    50% {
+      transform: scale(1.5);
+      box-shadow: 0 0 25px 10px rgba(217, 211, 221, 1);
+    }
+    100% {
+      transform: scale(1.3);
+      box-shadow: 0 0 15px 5px rgba(172, 128, 203, 0.863);
+    }
+  }
+`;
+
+const ChatDiv = styled.div`
+  position: absolute;
+  left: 0;
+  bottom: 0;
+
+  width: 300px;
+  height: 200px;
+
+  background-color: rgba(200, 200, 200, 0.5);
+
+  display: flex;
+  flex-direction: column;
+`;
+
+const ChatList = styled.div`
+  height: 90%;
+
+  margin: 10px;
+
+  white-space: nowrap;
+
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  overflow-x: none;
+  overflow-y: auto;
+`;
+
+const InputChat = styled.input`
+  height: 12%;
+  outline: none;
+`;
+
+interface PlayerProps {
+  x: number;
+  y: number;
+}
+
+const PlayerDiv = styled.div<PlayerProps>`
+  position: absolute;
+  left: ${({ x }) => `${x}px`};
+  bottom: ${({ y }) => `${y}px`};
+
+  transition: all 0.15s ease-out;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+`;
+
+const Player = styled.div`
+  width: 40px;
+  height: 40px;
+  background-color: red;
+`;
+
+const PlayerName = styled.p`
+  background-color: rgba(100, 100, 100, 0.5);
+
+  margin-bottom: 5px;
+
+  color: white;
+`;
+
+const ChatBubble = styled.div`
+  position: absolute;
+  top: -50px;
+
+  background-color: white;
+
+  min-width: 80px;
+  max-width: 120px;
+
+  padding: 5px;
+
+  border: 1px solid black;
+  border-radius: 3px;
+`;
+
+const Players = () => {
+  interface PlayerFromDB {
+    id: string;
+    nickname: string;
+    connectStatus: string;
+    location: string;
+    x: number;
+    y: number;
+  }
+
+  interface MapPlayer {
+    id: string;
+    nickname: string;
+    x: number;
+    y: number;
+  }
+
+  const [playerMap] = useAtom(playerMapAtom);
+  const [playerId] = useAtom(playerIdAtom);
+  const [mapPlayers, setMapPlayers] = useState<MapPlayer[]>();
+  const [, setPlayerAxis] = useAtom(playerAxisAtom);
+
+  useEffect(() => {
+    const db = getDatabase();
+    const playersRef = ref(db, "players");
+
+    // 실시간 구독
+    const unsubscribe = onValue(playersRef, (snapshot) => {
+      const data: Record<string, any> | null = snapshot.val();
+
+      const playerAxis = data
+        ? Object.entries(data).find(([key]) => key === playerId)
+        : undefined;
+
+      if (playerAxis) setPlayerAxis({ x: playerAxis[1].x, y: playerAxis[1].y });
+
+      const mapPlayersData: MapPlayer[] = data
+        ? Object.entries(data)
+            .filter(
+              ([id, player]: [string, PlayerFromDB]) =>
+                player.connectStatus === "online" &&
+                player.location === playerMap
+            )
+            .map(([id, player]: [string, PlayerFromDB]) => ({
+              id: id,
+              nickname: player.nickname,
+              x: player.x,
+              y: player.y,
+            }))
+        : [];
+
+      setMapPlayers(mapPlayersData);
+    });
+
+    return () => unsubscribe(); // 구독 해제
+  }, [playerId, playerMap]);
+
+  const [otherBubbles, setOtherBubbles] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    const db = getDatabase();
+    const playersRef = ref(db, `chat/all`);
+
+    const checkBubbleTime = async () => {
+      try {
+        const snapshot = await get(playersRef);
+        const data: Record<string, any> | null = snapshot.val();
+        if (!data) return;
+
+        const updatedOtherBubbles: Record<string, any> = {};
+
+        for (const [chatId, chat] of Object.entries(data)) {
+          if (chat.id === playerId) {
+            // playerId만 감소
+            if (chat.bubbleTime > 0) {
+              const newBubbleTime = chat.bubbleTime - 1;
+              // Firebase 업데이트
+              await update(ref(db, `chat/all/${chatId}`), {
+                bubbleTime: newBubbleTime,
+              });
+            }
+          }
+
+          // 나머지 bubbleTime > 0이면 화면에 보여주기
+          if (chat.bubbleTime > 0) {
+            updatedOtherBubbles[chat.id] = chat;
+          }
+        }
+
+        setOtherBubbles(updatedOtherBubbles);
+      } catch (err) {
+        console.error("데이터 처리 실패:", err);
+      }
+    };
+
+    const intervalId = setInterval(checkBubbleTime, 100); // 0.1초마다 실행
+    return () => clearInterval(intervalId);
+  }, [playerId]);
+
+  return (
+    <>
+      {mapPlayers &&
+        mapPlayers.map((p) => (
+          <PlayerDiv key={p.id} x={p.x} y={p.y}>
+            {otherBubbles[p.id] && (
+              <ChatBubble>
+                {p.nickname}: {otherBubbles[p.id].message}
+              </ChatBubble>
+            )}
+            <PlayerName>{p.nickname}</PlayerName>
+            <Player />
+          </PlayerDiv>
+        ))}
+    </>
+  );
+};
+
+const Key = () => {
+  const [playerId] = useAtom(playerIdAtom);
+  const pressedKeys = useRef(new Set<string>());
+  const isJumpingRef = useRef(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      pressedKeys.current.add(e.key);
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      pressedKeys.current.delete(e.key);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!playerId) return;
+
+    const gravityInterval = setInterval(async () => {
+      // 서버에 y값 전송
+      await updatePlayerLocation(playerId, "gravity");
+    }, 16); // 약 60FPS
+
+    return () => clearInterval(gravityInterval); // 언마운트 시 정리
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!playerId) return;
+
+      const keyPress = async () => {
+        // 좌우 이동
+        if (pressedKeys.current.has("ArrowLeft")) {
+          updatePlayerLocation(playerId, "left");
+        }
+        if (pressedKeys.current.has("ArrowRight")) {
+          updatePlayerLocation(playerId, "right");
+        }
+
+        // 점프
+        if (
+          pressedKeys.current.has("ArrowUp") &&
+          (await isPlayerFloor(playerId)) &&
+          !isJumpingRef.current
+        ) {
+          isJumpingRef.current = true;
+          jumpPlayer(playerId);
+        }
+      };
+
+      keyPress();
+    }, 16);
+
+    return () => clearInterval(interval);
+  }, [playerId]);
+
+  const jumpPlayer = async (playerId: string) => {
+    const JUMP_HEIGHT = 100; // 최대 높이
+    const JUMP_SPEED = 10; // 한 프레임에 올라가는 거리
+
+    let currentHeight = 0;
+    let goingUp = true; // 상승 상태 플래그
+
+    const jumpInterval = setInterval(async () => {
+      if (!goingUp) {
+        clearInterval(jumpInterval); // 최대 높이에 도달하면 종료
+        isJumpingRef.current = false;
+        return;
+      }
+
+      currentHeight += JUMP_SPEED;
+      if (currentHeight >= JUMP_HEIGHT) {
+        currentHeight = JUMP_HEIGHT;
+        goingUp = false;
+      }
+
+      // 현재 높이를 서버에 업데이트
+      await updatePlayerLocation(playerId, "jump"); // y값 직접 전달
+    }, 16); // 약 60FPS
+  };
+
+  return null;
+};
+
+const Field = () => {
+  const [playerId] = useAtom(playerIdAtom);
+  const [playerMap, setPlayerMap] = useAtom(playerMapAtom);
+  const [floorElements, setFloorElements] = useState<{ height: number }>({
+    height: 44,
+  });
+
+  interface Portal {
+    condition: string;
+    x: number;
+    y: number;
+    movingAxis: {
+      x: number;
+      y: number;
+    };
+  }
+
+  const [portals, setPortals] = useState<Record<string, Portal>>();
+
+  useEffect(() => {
+    const fieldRef = ref(db, `maps/${playerMap}/field`);
+    const unsubscribe = onValue(fieldRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      setFloorElements(data.floor);
+      setPortals(data.portals);
+    });
+
+    return () => unsubscribe(); // 컴포넌트 언마운트 시 구독 해제
+  }, [playerMap]);
+
+  const [playerAxis, setPlayerAxis] = useAtom(playerAxisAtom);
+
+  const pressedKeys = useRef(new Set<string>());
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      pressedKeys.current.add(e.key);
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      pressedKeys.current.delete(e.key);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!playerAxis || !portals) return;
+
+    let lastMoveTime = 0;
+
+    const checkPortal = async () => {
+      const now = Date.now();
+      if (now - lastMoveTime < 500) return;
+
+      const touchedPortal = Object.entries(portals).find(
+        ([location, portal]) =>
+          Math.hypot(playerAxis.x - portal.x, playerAxis.y - portal.y) <=
+          32 /* 포탈 크기 */
+      );
+
+      if (touchedPortal) console.log(touchedPortal[0]);
+
+      if (touchedPortal && pressedKeys.current.has("Enter")) {
+        lastMoveTime = now;
+
+        const playerRef = ref(db, `players/${playerId}`);
+        await update(playerRef, {
+          location: touchedPortal[0],
+          x: touchedPortal[1].movingAxis.x,
+          y: touchedPortal[1].movingAxis.y,
+        });
+
+        setPlayerMap(touchedPortal[0]);
+      }
+    };
+
+    const interval = setInterval(checkPortal, 50);
+    return () => clearInterval(interval);
+  }, [playerAxis, portals]);
+
+  return (
+    <>
+      <Floor height={floorElements.height} />
+      {portals !== undefined &&
+        Object.entries(portals).map(([location, portal]) => (
+          <Portal key={location} x={portal.x} y={portal.y} />
+        ))}
+    </>
+  );
+};
+
+const Chat = () => {
+  const [playerId] = useAtom(playerIdAtom);
+  const [message, setMessage] = useState<string>("");
+
+  const handleChangeMessage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setMessage(event.target.value);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      sendMessage(playerId, message);
+      setMessage("");
+    }
+  };
+
+  interface ChatMessage {
+    id: string;
+    nickname: string;
+    message: string;
+  }
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  useEffect(() => {
+    const chatRef = ref(db, "chat/all");
+    const unsubscribe = onValue(chatRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const messageList: ChatMessage[] = Object.values(data);
+      setMessages(messageList);
+    });
+
+    return () => unsubscribe(); // 컴포넌트 언마운트 시 구독 해제
+  }, []);
+
+  useEffect(() => {
+    if (messageEndRef.current) {
+      messageEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
+
+  return (
+    <ChatDiv>
+      <ChatList>
+        {messages.map((msg, index) => (
+          <div key={index}>
+            {msg.nickname}: {msg.message}
+          </div>
+        ))}
+        <div ref={messageEndRef} />
+      </ChatList>
+      <InputChat
+        type="text"
+        value={message}
+        onChange={handleChangeMessage}
+        onKeyDown={handleKeyDown}
+      />
+    </ChatDiv>
+  );
+};
+
+const Game = () => {
+  const [playerId] = useAtom(playerIdAtom);
+  const [playerMap] = useAtom(playerMapAtom);
+  const [openChat, setOpenChat] = useState<boolean>(true);
+
+  const isRegistered = useRef(false);
+
+  useEffect(() => {
+    if (isRegistered.current) return;
+    isRegistered.current = true;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "/") {
+        console.log("/ 키 눌림!");
+        setOpenChat((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  return (
+    <GameBackgroundDiv>
+      {/* 기본 세팅 */}
+      <PlayerFinder />
+      {/* 맵 요소 */}
+      {playerId && (
+        <>
+          <Key />
+          {playerMap && (
+            <>
+              <Players />
+              <Field />
+            </>
+          )}
+        </>
+      )}
+      {/* 채팅 */}
+      {openChat && <Chat />}
+    </GameBackgroundDiv>
+  );
+};
+
+export default Game;
