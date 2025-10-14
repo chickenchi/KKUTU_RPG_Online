@@ -230,7 +230,7 @@ const Players = () => {
       }
     };
 
-    const intervalId = setInterval(checkBubbleTime, 100); // 0.1초마다 실행
+    const intervalId = setInterval(checkBubbleTime, 1000); // 0.1초마다 실행
     return () => clearInterval(intervalId);
   }, [playerId]);
 
@@ -285,8 +285,8 @@ const Key = () => {
     if (!playerId) return;
 
     let velocity = 0; // y방향 속도
-    const gravity = 0.5; // 자연스러운 중력 가속도
-    const maxFallSpeed = 6; // 최대 낙하 속도
+    const gravity = 1; // 자연스러운 중력 가속도
+    const maxFallSpeed = 12; // 최대 낙하 속도
 
     const gravityInterval = setInterval(async () => {
       if (isJumpingRef.current) {
@@ -337,8 +337,8 @@ const Key = () => {
   }, [playerId]);
 
   const jumpPlayer = async (playerId: string) => {
-    let velocity = 4; // 초기 속도
-    const gravity = 1; // 감속량
+    let velocity = 8; // 초기 속도
+    const gravity = 7; // 감속량
 
     isJumpingRef.current = true;
 
@@ -449,6 +449,7 @@ const Field = () => {
   return (
     <>
       <Floor height={floorElements.height} />
+      <Players />
       {portals !== undefined &&
         Object.entries(portals).map(([location, portal]) => (
           <Portal key={location} x={portal.x} y={portal.y} />
@@ -667,7 +668,6 @@ const Game = () => {
           <Key />
           {playerMap && (
             <>
-              <Players />
               <Field />
             </>
           )}

@@ -56,26 +56,31 @@ export const updatePlayerLocation = async (
   const axis = direction === "left" || direction === "right" ? "x" : "y";
   const playerRef = ref(db, `players/${id}/${axis}`);
 
-  await runTransaction(playerRef, (currentValue) => {
-    let pos = currentValue;
+  const currentSnapshot = await get(playerRef);
+  const currentPos = currentSnapshot.val();
+  const floor = locationFloor.val();
 
+  // ✅ 효율 개선 포인트:
+  // 중력일 때, 이미 바닥에 닿아 있으면 굳이 runTransaction 호출하지 않음
+  if (direction === "gravity" && (currentPos <= floor || !figure)) return;
+
+  await runTransaction(playerRef, (pos) => {
     switch (direction) {
       case "left":
         if (pos > 0) pos -= MOVE_STEP;
         break;
-      case "jump":
-        pos += figure;
-        break;
+
       case "right":
         if (mapSize.val().width > pos) pos += MOVE_STEP;
         break;
+
+      case "jump":
+        pos += figure ?? 0;
+        break;
+
       case "gravity":
-        if (!figure) return pos;
-
-        console.log("?");
-
-        if (locationFloor.val() < pos) pos += figure;
-        if (locationFloor.val() > pos) pos = locationFloor.val();
+        pos += figure!; // figure는 위에서 null 체크 끝남
+        if (pos < floor) pos = floor;
         break;
     }
 

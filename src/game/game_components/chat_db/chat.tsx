@@ -13,7 +13,7 @@ export const sendMessage = async (id: string, message: string) => {
     id: id,
     nickname: userNickname.val(),
     message: message,
-    bubbleTime: 30,
+    bubbleTime: 3,
   })
     .then(() => {
       console.log("채팅 전송 완료");
