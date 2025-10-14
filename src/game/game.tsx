@@ -605,27 +605,22 @@ const MobileArrowPad = () => {
   const [playerId] = useAtom(playerIdAtom);
 
   const jumpPlayer = async (playerId: string) => {
-    const JUMP_HEIGHT = 100; // 최대 높이
-    const JUMP_SPEED = 10; // 한 프레임에 올라가는 거리
+    let velocity = 8; // 초기 속도
+    const gravity = 7; // 감속량
 
-    let currentHeight = 0;
-    let goingUp = true; // 상승 상태 플래그
+    isJumpingRef.current = true;
 
     const jumpInterval = setInterval(async () => {
-      if (!goingUp) {
-        clearInterval(jumpInterval); // 최대 높이에 도달하면 종료
-        isJumpingRef.current = false;
-        return;
-      }
+      // y값 업데이트 (위로 이동)
+      await updatePlayerLocation(playerId, "jump", velocity);
 
-      currentHeight += JUMP_SPEED;
-      if (currentHeight >= JUMP_HEIGHT) {
-        currentHeight = JUMP_HEIGHT;
-        goingUp = false;
-      }
+      velocity -= gravity; // 위로 갈수록 속도 감소
 
-      // 현재 높이를 서버에 업데이트
-      await updatePlayerLocation(playerId, "jump"); // y값 직접 전달
+      if (velocity <= 0) {
+        // 속도가 0 이하이면 점프 종료
+        clearInterval(jumpInterval);
+        isJumpingRef.current = false; // 이제 중력 적용 가능
+      }
     }, 16); // 약 60FPS
   };
 
@@ -643,7 +638,7 @@ const MobileArrowPad = () => {
 
     const id = setInterval(() => {
       updatePlayerLocation(playerId, direction);
-    }, 100);
+    }, 10);
 
     setIntervalId(id);
   };
