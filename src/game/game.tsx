@@ -684,14 +684,15 @@ const Chat = () => {
       <ChatList>
         {messages.map((msg, index) => (
           <>
-            {msg.sendingType === "all" ? (
+            {msg.sendingType === "all" && allChatChecked ? (
               <div key={index}>
                 {msg.nickname}: {msg.message}
               </div>
             ) : (
               msg.sendingType === "whisper" &&
               (msg.whisperRecipient === playerNickname ||
-                msg.nickname === playerNickname) && (
+                msg.nickname === playerNickname) &&
+              whisperChatChecked && (
                 <WhisperMessage key={index}>
                   {msg.whisperRecipient === playerNickname // 받는 대상이라면
                     ? `${msg.nickname} 님이 보낸 메시지: ${msg.message}`
