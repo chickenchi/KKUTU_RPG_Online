@@ -606,7 +606,7 @@ const MobileArrowPad = () => {
 
   const jumpPlayer = async (playerId: string) => {
     let velocity = 8; // 초기 속도
-    const gravity = 7; // 감속량
+    const gravity = 2; // 감속량
 
     isJumpingRef.current = true;
 
