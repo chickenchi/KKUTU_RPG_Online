@@ -7,13 +7,22 @@ import {
   isPlayerFloor,
   updatePlayerLocation,
 } from "./game_components/player_db/player";
-import { playerAxisAtom, playerIdAtom, playerMapAtom } from "@/atoms/account";
+import {
+  playerAxisAtom,
+  playerIdAtom,
+  playerMapAtom,
+  playerNicknameAtom,
+} from "@/atoms/account";
 import { useAtom } from "jotai";
 import { sendMessage } from "./game_components/chat_db/chat";
 import { db } from "@/common_components/firebase";
 import { isMobile } from "react-device-detect";
+import { isChatFocusedAtom } from "@/atoms/ui/ui";
+import { censorPhrase } from "./game_components/censorPhrase";
+import { setNickname } from "@/main/main_components/account_db/set_nickname";
 
 const GameBackgroundDiv = styled.div`
+  background-color: #516972;
   position: relative;
 
   width: 100%;
@@ -72,19 +81,49 @@ const ChatDiv = styled.div`
   left: 0;
   bottom: 0;
 
-  width: 300px;
-  height: 200px;
+  background-color: rgba(50, 50, 50, 0.5);
 
-  background-color: rgba(200, 200, 200, 0.5);
+  width: 300px;
+  height: 230px;
+
+  border-top-right-radius: 8px;
+
+  color: #cfcfcf;
+  line-height: 25px;
 
   display: flex;
   flex-direction: column;
 `;
 
+const ChatOptionDiv = styled.div`
+  width: 100%;
+  height: 20px;
+
+  padding: 5px 0 0 5px;
+
+  display: flex;
+  align-items: center;
+`;
+
+const DefaultChatDiv = styled.div`
+  display: flex;
+  align-items: center;
+`;
+const AllChatDiv = styled(DefaultChatDiv)``;
+const WhisperChatDiv = styled(DefaultChatDiv)``;
+
+const OptionLabel = styled.label`
+  margin-left: 5px;
+  font-size: 11pt;
+`;
+const ChatRadio = styled.input`
+  margin-left: 5px;
+`;
+
 const ChatList = styled.div`
   height: 90%;
 
-  margin: 10px;
+  margin: 15px;
 
   white-space: nowrap;
 
@@ -95,9 +134,73 @@ const ChatList = styled.div`
   overflow-y: auto;
 `;
 
-const InputChat = styled.input`
-  height: 12%;
+const WhisperMessage = styled.div`
+  color: #aaaaaa;
+`;
+
+const SendModeSelect = styled.select`
+  background-color: rgba(0, 0, 0, 0);
+  border: none;
+
+  width: 20%;
+
+  color: white;
+
   outline: none;
+`;
+
+const SendModeOption = styled.option`
+  background-color: rgb(50, 50, 50);
+  border-radius: none;
+
+  accent-color: #ff7b00;
+
+  outline: none;
+`;
+
+const InputChatDiv = styled.div`
+  background-color: rgb(50, 50, 50);
+
+  height: 17%;
+  width: 100%;
+
+  display: flex;
+  flex-direction: row;
+`;
+
+const WhisperRecipientInput = styled.input`
+  background-color: rgba(0, 0, 0, 0);
+  width: 20%;
+
+  color: white;
+  text-align: center;
+`;
+
+const InputChat = styled.input`
+  background-color: rgba(0, 0, 0, 0);
+  width: 80%;
+
+  border: none;
+
+  color: white;
+  padding-left: 5px;
+
+  outline: none;
+`;
+
+const ChatBubble = styled.div`
+  position: absolute;
+  top: -50px;
+
+  background-color: white;
+
+  min-width: 80px;
+  max-width: 120px;
+
+  padding: 5px;
+
+  border: 1px solid black;
+  border-radius: 3px;
 `;
 
 interface PlayerProps {
@@ -125,24 +228,9 @@ const Player = styled.img`
 const PlayerName = styled.p`
   background-color: rgba(100, 100, 100, 0.5);
 
-  margin-bottom: 5px;
+  margin-bottom: 0px;
 
   color: white;
-`;
-
-const ChatBubble = styled.div`
-  position: absolute;
-  top: -50px;
-
-  background-color: white;
-
-  min-width: 80px;
-  max-width: 120px;
-
-  padding: 5px;
-
-  border: 1px solid black;
-  border-radius: 3px;
 `;
 
 interface MapPlayer {
@@ -217,7 +305,7 @@ const Players: React.FC<PlayersProps> = ({ mapPlayers, setMapPlayers }) => {
 
   useEffect(() => {
     const db = getDatabase();
-    const playersRef = ref(db, `chat/all`);
+    const playersRef = ref(db, `chat/message`);
 
     const checkBubbleTime = async () => {
       try {
@@ -233,7 +321,7 @@ const Players: React.FC<PlayersProps> = ({ mapPlayers, setMapPlayers }) => {
             if (chat.bubbleTime > 0) {
               const newBubbleTime = chat.bubbleTime - 1;
               // Firebase 업데이트
-              await update(ref(db, `chat/all/${chatId}`), {
+              await update(ref(db, `chat/message/${chatId}`), {
                 bubbleTime: newBubbleTime,
               });
             }
@@ -275,18 +363,18 @@ const Players: React.FC<PlayersProps> = ({ mapPlayers, setMapPlayers }) => {
 };
 
 const Key = () => {
+  const [isChatFocused] = useAtom(isChatFocusedAtom);
   const [playerId] = useAtom(playerIdAtom);
   const pressedKeys = useRef(new Set<string>());
   const isJumpingRef = useRef(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isChatFocused) return;
       pressedKeys.current.add(e.key);
 
       if (["ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key))
         e.preventDefault(); // 기본 스크롤 방지
-
-      if (["Space"].includes(e.code)) e.preventDefault(); // 기본 스크롤 방지
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -300,7 +388,7 @@ const Key = () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, []);
+  }, [isChatFocused]);
 
   useEffect(() => {
     if (!playerId) return;
@@ -387,6 +475,7 @@ const Field = () => {
     height: 44,
   });
   const [mapPlayers, setMapPlayers] = useState<MapPlayer[]>();
+  const [isChatFocused] = useAtom(isChatFocusedAtom);
 
   interface Portal {
     condition: string;
@@ -434,7 +523,7 @@ const Field = () => {
   }, []);
 
   useEffect(() => {
-    if (!playerAxis || !portals) return;
+    if (!playerAxis || !portals || isChatFocused) return;
 
     let lastMoveTime = 0;
 
@@ -444,8 +533,8 @@ const Field = () => {
 
       const touchedPortal = Object.entries(portals).find(
         ([location, portal]) =>
-          Math.hypot(playerAxis.x - portal.x, playerAxis.y - portal.y) <=
-          32 /* 포탈 크기 */
+          Math.hypot(playerAxis.x - (portal.x - 25), playerAxis.y - portal.y) <=
+          50 /* 포탈 크기 */
       );
 
       if (touchedPortal) console.log(touchedPortal[0]);
@@ -466,7 +555,7 @@ const Field = () => {
 
     const interval = setInterval(checkPortal, 50);
     return () => clearInterval(interval);
-  }, [playerAxis, portals]);
+  }, [playerAxis, portals, isChatFocused]);
 
   const [cameraOffsetX, setCameraOffsetX] = useState(0);
 
@@ -502,15 +591,25 @@ const Field = () => {
 
 const Chat = () => {
   const [playerId] = useAtom(playerIdAtom);
+  const [playerNickname] = useAtom(playerNicknameAtom);
   const [message, setMessage] = useState<string>("");
+  const [, setIsChatFocused] = useAtom(isChatFocusedAtom);
 
   const handleChangeMessage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setMessage(event.target.value);
   };
 
+  const handleFocus = () => {
+    setIsChatFocused(true);
+  };
+  const handleBlur = () => {
+    setIsChatFocused(false);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      sendMessage(playerId, message);
+      if (message === "") return;
+      sendMessage(playerId, censorPhrase(message), sendMode, whisperRecipient);
       setMessage("");
     }
   };
@@ -519,12 +618,14 @@ const Chat = () => {
     id: string;
     nickname: string;
     message: string;
+    sendingType: string;
+    whisperRecipient: string;
   }
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
-    const chatRef = ref(db, "chat/all");
+    const chatRef = ref(db, "chat/message");
     const unsubscribe = onValue(chatRef, (snapshot) => {
       const data = snapshot.val() || {};
       const messageList: ChatMessage[] = Object.values(data);
@@ -542,22 +643,93 @@ const Chat = () => {
 
   const messageEndRef = useRef<HTMLDivElement | null>(null);
 
+  const [allChatChecked, setAllChatChecked] = useState(true);
+  const [whisperChatChecked, setWhisperChatChecked] = useState(true);
+
+  const [sendMode, setSendMode] = useState("all");
+  const [whisperRecipient, setWhisperRecipient] = useState("");
+
+  const handleSendMode = (e: any) => {
+    setSendMode(e.target.value);
+  };
+
+  const handleWhisperRecipient = (e: any) => {
+    setWhisperRecipient(e.target.value);
+  };
+
+  const handleAllChatClick = () => {
+    setAllChatChecked(!allChatChecked);
+  };
+
+  const handleWhisperChatClick = () => {
+    setWhisperChatChecked(!whisperChatChecked);
+  };
+
   return (
     <ChatDiv>
+      <ChatOptionDiv>
+        <AllChatDiv onClick={handleAllChatClick}>
+          <OptionLabel>전체</OptionLabel>
+          <ChatRadio type="radio" value="all" checked={allChatChecked} />
+        </AllChatDiv>
+        <WhisperChatDiv onClick={handleWhisperChatClick}>
+          <OptionLabel>귓속말</OptionLabel>
+          <ChatRadio
+            type="radio"
+            value="whisper"
+            checked={whisperChatChecked}
+          />
+        </WhisperChatDiv>
+      </ChatOptionDiv>
       <ChatList>
         {messages.map((msg, index) => (
-          <div key={index}>
-            {msg.nickname}: {msg.message}
-          </div>
+          <>
+            {msg.sendingType === "all" ? (
+              <div key={index}>
+                {msg.nickname}: {msg.message}
+              </div>
+            ) : (
+              msg.sendingType === "whisper" &&
+              (msg.whisperRecipient === playerNickname ||
+                msg.nickname === playerNickname) && (
+                <WhisperMessage key={index}>
+                  {msg.whisperRecipient === playerNickname // 받는 대상이라면
+                    ? `${msg.nickname} 님이 보낸 메시지: ${msg.message}`
+                    : `${msg.nickname} -> ${msg.whisperRecipient}: ${msg.message}`}
+                </WhisperMessage>
+              )
+            )}
+          </>
         ))}
         <div ref={messageEndRef} />
       </ChatList>
-      <InputChat
-        type="text"
-        value={message}
-        onChange={handleChangeMessage}
-        onKeyDown={handleKeyDown}
-      />
+      <InputChatDiv>
+        <SendModeSelect onChange={handleSendMode}>
+          <SendModeOption value="all" selected={sendMode === "all"}>
+            전체
+          </SendModeOption>
+          <SendModeOption value="whisper" selected={sendMode === "whisper"}>
+            귓속말
+          </SendModeOption>
+        </SendModeSelect>
+        {sendMode === "whisper" && (
+          <WhisperRecipientInput
+            type="text"
+            value={whisperRecipient}
+            onChange={handleWhisperRecipient}
+            placeholder="대상"
+          />
+        )}
+        <InputChat
+          type="text"
+          placeholder="내용을 입력해 주세요!"
+          value={message}
+          onChange={handleChangeMessage}
+          onKeyDown={handleKeyDown}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+        />
+      </InputChatDiv>
     </ChatDiv>
   );
 };

@@ -3,6 +3,7 @@ import {
   playerAxisAtom,
   playerIdAtom,
   playerMapAtom,
+  playerNicknameAtom,
 } from "@/atoms/account";
 import { useAtom } from "jotai";
 import { useNavigate } from "react-router-dom";
@@ -17,6 +18,7 @@ export const PlayerFinder = () => {
   const [, setPlayerId] = useAtom(playerIdAtom);
   const [, setPlayerMap] = useAtom(playerMapAtom);
   const [, setPlayerAxis] = useAtom(playerAxisAtom);
+  const [, setPlayerNickname] = useAtom(playerNicknameAtom);
 
   useEffect(() => {
     const findUserInfo = async () => {
@@ -52,9 +54,11 @@ export const PlayerFinder = () => {
       if (!playerLocation) {
         setPlayerSetting(playerInfo.id, playerInfo.nickname);
         setPlayerMap("potatina");
+        setPlayerNickname(playerInfo.nickname);
       } else {
         setPlayerMap(playerLocation.location);
         setPlayerAxis({ x: playerLocation.x, y: playerLocation.y });
+        setPlayerNickname(playerInfo.nickname);
       }
     };
 

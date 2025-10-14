@@ -4,5 +4,6 @@ import { atomWithStorage } from 'jotai/utils';
 
 export const accountAtom = atomWithStorage<User | null>('account', null);
 export const playerIdAtom = atom<string>("");
+export  const playerNicknameAtom = atom<string>("");
 export const playerMapAtom = atom<string>("");
 export const playerAxisAtom = atom<{x: number, y: number}>({x: 0, y: 44});
