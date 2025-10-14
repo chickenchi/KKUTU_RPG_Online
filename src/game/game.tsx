@@ -14,20 +14,30 @@ import { db } from "@/common_components/firebase";
 import { isMobile } from "react-device-detect";
 
 const GameBackgroundDiv = styled.div`
+  position: relative;
+
   width: 100%;
   height: 100%;
 
+  overflow-x: hidden;
+  overflow-y: auto;
+`;
+
+const CameraDiv = styled.div<{ offsetX: number }>`
+  position: absolute;
+
+  width: 1550px; /* 맵 전체 크기만큼 */
+  height: 100%;
+  transform: translate3d(${({ offsetX }) => offsetX}px, 0, 0);
+
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
 `;
 
 const Floor = styled.div<{ height: number }>`
-  position: absolute;
-  bottom: 0;
-
   background-color: green;
 
-  width: 100%;
   height: ${({ height }) => `${height}px`};
 `;
 
@@ -135,7 +145,19 @@ const ChatBubble = styled.div`
   border-radius: 3px;
 `;
 
-const Players = () => {
+interface MapPlayer {
+  id: string;
+  nickname: string;
+  x: number;
+  y: number;
+}
+
+interface PlayersProps {
+  mapPlayers: MapPlayer[] | undefined;
+  setMapPlayers: React.Dispatch<React.SetStateAction<MapPlayer[] | undefined>>;
+}
+
+const Players: React.FC<PlayersProps> = ({ mapPlayers, setMapPlayers }) => {
   interface PlayerFromDB {
     id: string;
     nickname: string;
@@ -154,7 +176,6 @@ const Players = () => {
 
   const [playerMap] = useAtom(playerMapAtom);
   const [playerId] = useAtom(playerIdAtom);
-  const [mapPlayers, setMapPlayers] = useState<MapPlayer[]>();
   const [, setPlayerAxis] = useAtom(playerAxisAtom);
 
   useEffect(() => {
@@ -365,6 +386,7 @@ const Field = () => {
   const [floorElements, setFloorElements] = useState<{ height: number }>({
     height: 44,
   });
+  const [mapPlayers, setMapPlayers] = useState<MapPlayer[]>();
 
   interface Portal {
     condition: string;
@@ -446,15 +468,35 @@ const Field = () => {
     return () => clearInterval(interval);
   }, [playerAxis, portals]);
 
+  const [cameraOffsetX, setCameraOffsetX] = useState(0);
+
+  useEffect(() => {
+    if (!playerAxis) return;
+
+    const mapWidth = 1550;
+    const screenWidth = window.innerWidth;
+    const centerX = screenWidth / 2;
+
+    let targetOffset = centerX - playerAxis.x;
+
+    // 맵 경계 체크
+    if (targetOffset > 0) targetOffset = 0;
+    if (targetOffset < screenWidth - mapWidth)
+      targetOffset = screenWidth - mapWidth;
+
+    // 부드럽게 이동 (lerp)
+    setCameraOffsetX(targetOffset);
+  }, [playerAxis]);
+
   return (
-    <>
+    <CameraDiv offsetX={cameraOffsetX}>
       <Floor height={floorElements.height} />
-      <Players />
+      <Players mapPlayers={mapPlayers} setMapPlayers={setMapPlayers} />
       {portals !== undefined &&
         Object.entries(portals).map(([location, portal]) => (
           <Portal key={location} x={portal.x} y={portal.y} />
         ))}
-    </>
+    </CameraDiv>
   );
 };
 
