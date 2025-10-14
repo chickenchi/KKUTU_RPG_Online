@@ -108,8 +108,8 @@ const PlayerDiv = styled.div<PlayerProps>`
 `;
 
 const Player = styled.img`
-  width: 40px;
-  height: 40px;
+  width: 70px;
+  height: 70px;
 `;
 
 const PlayerName = styled.p`
@@ -244,6 +244,7 @@ const Players = () => {
                 {p.nickname}: {otherBubbles[p.id].message}
               </ChatBubble>
             )}
+
             <PlayerName>{p.nickname}</PlayerName>
             <Player src="/image/moremi.png" />
           </PlayerDiv>
@@ -260,6 +261,11 @@ const Key = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       pressedKeys.current.add(e.key);
+
+      if (["ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key))
+        e.preventDefault(); // 기본 스크롤 방지
+
+      if (["Space"].includes(e.code)) e.preventDefault(); // 기본 스크롤 방지
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -278,13 +284,27 @@ const Key = () => {
   useEffect(() => {
     if (!playerId) return;
 
+    let velocity = 0; // y방향 속도
+    const gravity = 0.5; // 자연스러운 중력 가속도
+    const maxFallSpeed = 6; // 최대 낙하 속도
+
     const gravityInterval = setInterval(async () => {
-      // 서버에 y값 전송
-      await updatePlayerLocation(playerId, "gravity");
+      if (isJumpingRef.current) {
+        velocity = 0;
+        return; // 점프 중이면 중력 적용 안함
+      }
+
+      // 속도 증가 (중력 적용)
+      velocity -= gravity;
+      if (velocity < -maxFallSpeed) velocity = -maxFallSpeed;
+
+      // y좌표 업데이트
+      await updatePlayerLocation(playerId, "gravity", velocity);
+      // 서버에서 velocity로 y 좌표를 더하도록 구현
     }, 16); // 약 60FPS
 
-    return () => clearInterval(gravityInterval); // 언마운트 시 정리
-  }, []);
+    return () => clearInterval(gravityInterval);
+  }, [playerId]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -301,7 +321,7 @@ const Key = () => {
 
         // 점프
         if (
-          pressedKeys.current.has("ArrowUp") &&
+          pressedKeys.current.has(" ") &&
           (await isPlayerFloor(playerId)) &&
           !isJumpingRef.current
         ) {
@@ -317,27 +337,22 @@ const Key = () => {
   }, [playerId]);
 
   const jumpPlayer = async (playerId: string) => {
-    const JUMP_HEIGHT = 100; // 최대 높이
-    const JUMP_SPEED = 10; // 한 프레임에 올라가는 거리
+    let velocity = 4; // 초기 속도
+    const gravity = 1; // 감속량
 
-    let currentHeight = 0;
-    let goingUp = true; // 상승 상태 플래그
+    isJumpingRef.current = true;
 
     const jumpInterval = setInterval(async () => {
-      if (!goingUp) {
-        clearInterval(jumpInterval); // 최대 높이에 도달하면 종료
-        isJumpingRef.current = false;
-        return;
-      }
+      // y값 업데이트 (위로 이동)
+      await updatePlayerLocation(playerId, "jump", velocity);
 
-      currentHeight += JUMP_SPEED;
-      if (currentHeight >= JUMP_HEIGHT) {
-        currentHeight = JUMP_HEIGHT;
-        goingUp = false;
-      }
+      velocity -= gravity; // 위로 갈수록 속도 감소
 
-      // 현재 높이를 서버에 업데이트
-      await updatePlayerLocation(playerId, "jump"); // y값 직접 전달
+      if (velocity <= 0) {
+        // 속도가 0 이하이면 점프 종료
+        clearInterval(jumpInterval);
+        isJumpingRef.current = false; // 이제 중력 적용 가능
+      }
     }, 16); // 약 60FPS
   };
 
@@ -530,6 +545,11 @@ const ArrowButton = styled.button`
   font-size: 24px;
   cursor: pointer;
   transition: background 0.2s;
+  user-select: none; /* 텍스트 선택 방지 */
+  -webkit-user-select: none; /* iOS Safari용 */
+  -webkit-touch-callout: none; /* iOS에서 꾹 눌러도 복사 메뉴 안 뜸 */
+  touch-action: none; /* 드래그, 줌, 스크롤 방지 */
+  -webkit-tap-highlight-color: transparent; /* 터치 시 반짝임 제거 */
 
   &:active {
     background: #555;

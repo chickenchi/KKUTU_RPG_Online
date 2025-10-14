@@ -42,11 +42,10 @@ type Direction = "left" | "right" | "jump" | "gravity";
 
 export const updatePlayerLocation = async (
   id: string,
-  direction: Direction
+  direction: Direction,
+  figure?: number
 ) => {
   const MOVE_STEP = 5;
-  const GRAVITY = 10;
-  const MOVE_JUMP = 25;
 
   const playerLocation = await get(ref(db, `players/${id}/location`));
   const mapSize = await get(ref(db, `maps/${playerLocation.val()}/mapSize`));
@@ -65,13 +64,17 @@ export const updatePlayerLocation = async (
         if (pos > 0) pos -= MOVE_STEP;
         break;
       case "jump":
-        pos += MOVE_JUMP;
+        pos += figure;
         break;
       case "right":
         if (mapSize.val().width > pos) pos += MOVE_STEP;
         break;
       case "gravity":
-        if (locationFloor.val() < pos) pos -= GRAVITY;
+        if (!figure) return pos;
+
+        console.log("?");
+
+        if (locationFloor.val() < pos) pos += figure;
         if (locationFloor.val() > pos) pos = locationFloor.val();
         break;
     }
