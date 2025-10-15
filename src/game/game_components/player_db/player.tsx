@@ -1,5 +1,5 @@
 import { db } from "@/common_components/firebase";
-import { get, ref, runTransaction, set } from "firebase/database";
+import { get, onValue, ref, runTransaction, set } from "firebase/database";
 
 export const findPlayer = async (
   id: string
@@ -86,19 +86,4 @@ export const updatePlayerLocation = async (
 
     return pos;
   });
-};
-
-export const isPlayerFloor = async (id: string) => {
-  const playerLocationSnap = await get(ref(db, `players/${id}/location`));
-  const playerLocation = playerLocationSnap.val();
-
-  const floorSnap = await get(
-    ref(db, `maps/${playerLocation}/field/floor/height`)
-  );
-  const floorY = floorSnap.val();
-
-  const playerYSnap = await get(ref(db, `players/${id}/y`));
-  const playerY = playerYSnap.val();
-
-  return playerY === floorY;
 };

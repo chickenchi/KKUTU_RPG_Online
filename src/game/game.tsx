@@ -3,14 +3,13 @@ import React, { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import { PlayerFinder } from "./game_components/element_settings";
 import { get, getDatabase, onValue, ref, set, update } from "firebase/database";
+import { updatePlayerLocation } from "./game_components/player_db/player";
 import {
-  isPlayerFloor,
-  updatePlayerLocation,
-} from "./game_components/player_db/player";
-import {
+  floorElementsAtom,
   playerAxisAtom,
   playerIdAtom,
   playerMapAtom,
+  playerMapSizeAtom,
   playerNicknameAtom,
 } from "@/atoms/account";
 import { useAtom } from "jotai";
@@ -212,15 +211,8 @@ const ChatBubble = styled.div`
   border-radius: 3px;
 `;
 
-interface PlayerProps {
-  x: number;
-  y: number;
-}
-
-const PlayerDiv = styled.div<PlayerProps>`
+const PlayerDiv = styled.div`
   position: absolute;
-  left: ${({ x }) => `${x}px`};
-  bottom: ${({ y }) => `${y}px`};
 
   transition: all 0.15s ease-out;
 
@@ -356,7 +348,7 @@ const Players: React.FC<PlayersProps> = ({ mapPlayers, setMapPlayers }) => {
     <>
       {mapPlayers &&
         mapPlayers.map((p) => (
-          <PlayerDiv key={p.id} x={p.x} y={p.y}>
+          <PlayerDiv style={{ left: `${p.x}px`, bottom: `${p.y}px` }}>
             {otherBubbles[p.id] && (
               <ChatBubble>
                 {p.nickname}: {otherBubbles[p.id].message}
@@ -374,6 +366,9 @@ const Players: React.FC<PlayersProps> = ({ mapPlayers, setMapPlayers }) => {
 const Key = () => {
   const [isChatFocused] = useAtom(isChatFocusedAtom);
   const [playerId] = useAtom(playerIdAtom);
+  const [playerAxis] = useAtom(playerAxisAtom);
+  const [floorElements] = useAtom(floorElementsAtom);
+
   const pressedKeys = useRef(new Set<string>());
   const isJumpingRef = useRef(false);
 
@@ -440,7 +435,7 @@ const Key = () => {
         // 점프
         if (
           pressedKeys.current.has(" ") &&
-          (await isPlayerFloor(playerId)) &&
+          playerAxis.y === floorElements.height &&
           !isJumpingRef.current
         ) {
           isJumpingRef.current = true;
@@ -480,6 +475,7 @@ const Key = () => {
 const Field = () => {
   const [playerId] = useAtom(playerIdAtom);
   const [playerMap, setPlayerMap] = useAtom(playerMapAtom);
+  const [playerMapSize, setPlayerMapSize] = useAtom(playerMapSizeAtom);
   const [floorElements, setFloorElements] = useState<{ height: number }>({
     height: 44,
   });
@@ -499,14 +495,18 @@ const Field = () => {
   const [portals, setPortals] = useState<Record<string, Portal>>();
 
   useEffect(() => {
-    const fieldRef = ref(db, `maps/${playerMap}/field`);
-    const unsubscribe = onValue(fieldRef, (snapshot) => {
-      const data = snapshot.val() || {};
-      setFloorElements(data.floor);
-      setPortals(data.portals);
-    });
+    const fetchFieldData = async () => {
+      const fieldRef = ref(db, `maps/${playerMap}`);
+      const snapshot = await get(fieldRef);
+      const data = snapshot.val();
 
-    return () => unsubscribe(); // 컴포넌트 언마운트 시 구독 해제
+      // 값이 무조건 있다고 가정
+      setFloorElements(data.field.floor);
+      setPortals(data.field.portals);
+      setPlayerMapSize(data.mapSize);
+    };
+
+    fetchFieldData();
   }, [playerMap]);
 
   const [playerAxis, setPlayerAxis] = useAtom(playerAxisAtom);
@@ -546,8 +546,6 @@ const Field = () => {
           50 /* 포탈 크기 */
       );
 
-      if (touchedPortal) console.log(touchedPortal[0]);
-
       if (touchedPortal && pressedKeys.current.has("Enter")) {
         lastMoveTime = now;
 
@@ -571,7 +569,7 @@ const Field = () => {
   useEffect(() => {
     if (!playerAxis) return;
 
-    const mapWidth = 1550;
+    const mapWidth = playerMapSize.width + 50;
     const screenWidth = window.innerWidth;
     const centerX = screenWidth / 2;
 
@@ -801,6 +799,8 @@ const ArrowButton = styled.button`
 const MobileArrowPad = () => {
   const isJumpingRef = useRef<boolean>(false);
   const [playerId] = useAtom(playerIdAtom);
+  const [playerAxis] = useAtom(playerAxisAtom);
+  const [floorElements] = useAtom(floorElementsAtom);
 
   const jumpPlayer = async (playerId: string) => {
     let velocity = 8; // 초기 속도
@@ -823,7 +823,7 @@ const MobileArrowPad = () => {
   };
 
   const jump = async () => {
-    if (!isJumpingRef.current && (await isPlayerFloor(playerId))) {
+    if (!isJumpingRef.current && playerAxis.y === floorElements.height) {
       isJumpingRef.current = true;
       jumpPlayer(playerId);
     }
