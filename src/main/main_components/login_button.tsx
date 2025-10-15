@@ -3,9 +3,10 @@ import { googleSignIn } from "../../authentication";
 import { styled } from "styled-components";
 import { useAtom } from "jotai";
 import { accountAtom } from "@/atoms/account";
-import { setNickname } from "./account_db/set_nickname";
-import { findPlayerInfo } from "./account_db/find_nickname";
+import { setNickname } from "../../common_components/account_db/set_nickname";
+import { findPlayerInfo } from "../../common_components/account_db/find_nickname";
 import { useNavigate } from "react-router-dom";
+import { checkNickname } from "@/common_components/account_db/checkNickname";
 
 const StartOrLoginButton = styled.button`
   width: 200px;
@@ -30,7 +31,7 @@ const GoogleLoginButton = () => {
         let email = user.email.split("@")[0];
 
         if (!(await findPlayerInfo(email))) {
-          if (createNickname(email)) startGame();
+          if (await createNickname(email)) startGame();
         } else {
           startGame();
         }
@@ -39,15 +40,20 @@ const GoogleLoginButton = () => {
   };
 
   /** 닉네임 생성 */
-  const createNickname = (email: string) => {
+  const createNickname = async (email: string) => {
     let nickname: string | null = "";
 
     while (true) {
       nickname = window.prompt("닉네임을 입력해 주세요!");
 
-      if (!nickname || !checkNickname(nickname)) {
-        alert("사용할 수 없거나 부적절한 닉네임입니다.");
-      } else {
+      if (!nickname) {
+        alert("닉네임을 입력하세요!");
+        continue;
+      }
+
+      const check = await checkNickname(nickname);
+
+      if (check) {
         break;
       }
     }
@@ -63,9 +69,6 @@ const GoogleLoginButton = () => {
   };
 
   /** 부적절한 닉네임 확인 */
-  const checkNickname = (nickname: string) => {
-    return true;
-  };
 
   const startGame = () => {
     navigate("/game");

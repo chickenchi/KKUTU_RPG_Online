@@ -19,7 +19,7 @@ import { db } from "@/common_components/firebase";
 import { isMobile } from "react-device-detect";
 import { isChatFocusedAtom } from "@/atoms/ui/ui";
 import { censorPhrase } from "./game_components/censorPhrase";
-import { setNickname } from "@/main/main_components/account_db/set_nickname";
+import { setNickname } from "@/common_components/account_db/set_nickname";
 
 const GameBackgroundDiv = styled.div`
   background-color: #516972;
@@ -132,6 +132,14 @@ const ChatList = styled.div`
 
   overflow-x: none;
   overflow-y: auto;
+`;
+
+const Message = styled.div`
+  width: 100%;
+
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
 `;
 
 const WhisperMessage = styled.div`
@@ -685,9 +693,9 @@ const Chat = () => {
         {messages.map((msg, index) => (
           <>
             {msg.sendingType === "all" && allChatChecked ? (
-              <div key={index}>
+              <Message key={index}>
                 {msg.nickname}: {msg.message}
-              </div>
+              </Message>
             ) : (
               msg.sendingType === "whisper" &&
               (msg.whisperRecipient === playerNickname ||

@@ -8,7 +8,7 @@ import {
 import { useAtom } from "jotai";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-import { findPlayerInfo } from "@/main/main_components/account_db/find_nickname";
+import { findPlayerInfo } from "@/common_components/account_db/find_nickname";
 import { User } from "firebase/auth";
 import { findPlayer, setPlayerSetting } from "./player_db/player";
 
@@ -38,9 +38,7 @@ export const PlayerFinder = () => {
       let email = account.email.split("@")[0];
       let playerInfo = await findPlayerInfo(email);
 
-      if (!playerInfo) return;
-
-      if (!playerInfo.nickname) {
+      if (!playerInfo) {
         alert(`닉네임이 존재하지 않습니다!
 로그아웃 후 로그인해 닉네임을 입력해 주세요.`);
         navigate("/");
