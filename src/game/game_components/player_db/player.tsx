@@ -25,7 +25,7 @@ export const setPlayerSetting = async (id: string, nickname: string) => {
     connectStatus: "online",
     location: "potatina",
     x: 10,
-    y: 44,
+    y: 300,
   })
     .then(() => {
       console.log("플레이어 기본 위치 지정 완료");
