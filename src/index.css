@@ -8,5 +8,10 @@ body,
 }
 
 body {
-    background-color: #111111;
+  background-color: #111111;
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+input {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
