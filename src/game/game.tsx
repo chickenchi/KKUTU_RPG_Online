@@ -20,6 +20,7 @@ import { isMobile } from "react-device-detect";
 import { isChatFocusedAtom } from "@/atoms/ui/ui";
 import { censorPhrase } from "./game_components/censorPhrase";
 import { setNickname } from "@/common_components/account_db/set_nickname";
+import { isNicknameExists } from "@/common_components/account_db/isNickNameExists";
 
 const GameBackgroundDiv = styled.div`
   background-color: #516972;
@@ -603,6 +604,14 @@ const Chat = () => {
   const [message, setMessage] = useState<string>("");
   const [, setIsChatFocused] = useAtom(isChatFocusedAtom);
 
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
+
+  const [allChatChecked, setAllChatChecked] = useState(true);
+  const [whisperChatChecked, setWhisperChatChecked] = useState(true);
+
+  const [sendMode, setSendMode] = useState("all");
+  const [whisperRecipient, setWhisperRecipient] = useState("");
+
   const handleChangeMessage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setMessage(event.target.value);
   };
@@ -617,6 +626,16 @@ const Chat = () => {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       if (message === "") return;
+      if (whisperRecipient === playerNickname) {
+        alert("자기 자신에게 귓속말을 보낼 수 없습니다.");
+        setWhisperRecipient("");
+        return;
+      }
+
+      if (!isNicknameExists(whisperRecipient)) {
+        alert("해당 닉네임은 존재하지 않습니다.");
+        return;
+      }
       sendMessage(playerId, censorPhrase(message), sendMode, whisperRecipient);
       setMessage("");
     }
@@ -648,14 +667,6 @@ const Chat = () => {
       messageEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
-
-  const messageEndRef = useRef<HTMLDivElement | null>(null);
-
-  const [allChatChecked, setAllChatChecked] = useState(true);
-  const [whisperChatChecked, setWhisperChatChecked] = useState(true);
-
-  const [sendMode, setSendMode] = useState("all");
-  const [whisperRecipient, setWhisperRecipient] = useState("");
 
   const handleSendMode = (e: any) => {
     setSendMode(e.target.value);
@@ -693,7 +704,10 @@ const Chat = () => {
         {messages.map((msg, index) => (
           <>
             {msg.sendingType === "all" && allChatChecked ? (
-              <Message key={index}>
+              <Message
+                onClick={() => setWhisperRecipient(msg.nickname)}
+                key={index}
+              >
                 {msg.nickname}: {msg.message}
               </Message>
             ) : (
@@ -701,7 +715,10 @@ const Chat = () => {
               (msg.whisperRecipient === playerNickname ||
                 msg.nickname === playerNickname) &&
               whisperChatChecked && (
-                <WhisperMessage key={index}>
+                <WhisperMessage
+                  onClick={() => setWhisperRecipient(msg.nickname)}
+                  key={index}
+                >
                   {msg.whisperRecipient === playerNickname // 받는 대상이라면
                     ? `${msg.nickname} 님이 보낸 메시지: ${msg.message}`
                     : `${msg.nickname} -> ${msg.whisperRecipient}: ${msg.message}`}
