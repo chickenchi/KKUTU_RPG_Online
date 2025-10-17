@@ -3,7 +3,10 @@ import React, { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import { PlayerFinder } from "./game_components/element_settings";
 import { get, getDatabase, onValue, ref, set, update } from "firebase/database";
-import { updatePlayerLocation } from "./game_components/player_db/player";
+import {
+  isPlayerFloor,
+  updatePlayerLocation,
+} from "./game_components/player_db/player";
 import {
   floorElementsAtom,
   playerAxisAtom,
@@ -11,6 +14,7 @@ import {
   playerMapAtom,
   playerMapSizeAtom,
   playerNicknameAtom,
+  skyFloorsAtom,
 } from "@/atoms/account";
 import { useAtom } from "jotai";
 import { sendMessage } from "./game_components/chat_db/chat";
@@ -18,7 +22,6 @@ import { db } from "@/common_components/firebase";
 import { isMobile } from "react-device-detect";
 import { isChatFocusedAtom } from "@/atoms/ui/ui";
 import { censorPhrase } from "./game_components/censorPhrase";
-import { setNickname } from "@/common_components/account_db/set_nickname";
 import { isNicknameExists } from "@/common_components/account_db/isNickNameExists";
 
 const GameBackgroundDiv = styled.div`
@@ -42,6 +45,22 @@ const CameraDiv = styled.div<{ offsetX: number }>`
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+`;
+
+const SkyFloor = styled.div<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}>`
+  position: absolute;
+  left: ${({ x }) => `${x}px`};
+  bottom: ${({ y }) => `${y}px`};
+
+  background-color: green;
+
+  width: ${({ width }) => `${width}px`};
+  height: ${({ height }) => `${height}px`};
 `;
 
 const Floor = styled.div<{ height: number }>`
@@ -435,7 +454,7 @@ const Key = () => {
         // 점프
         if (
           pressedKeys.current.has(" ") &&
-          playerAxis.y === floorElements.height &&
+          (await isPlayerFloor(playerId)) &&
           !isJumpingRef.current
         ) {
           isJumpingRef.current = true;
@@ -447,7 +466,7 @@ const Key = () => {
     }, 16);
 
     return () => clearInterval(interval);
-  }, [playerId]);
+  }, [playerId, isJumpingRef]);
 
   const jumpPlayer = async (playerId: string) => {
     let velocity = 8; // 초기 속도
@@ -479,6 +498,7 @@ const Field = () => {
   const [floorElements, setFloorElements] = useState<{ height: number }>({
     height: 44,
   });
+  const [skyFloors, setSkyFloors] = useAtom(skyFloorsAtom);
   const [mapPlayers, setMapPlayers] = useState<MapPlayer[]>();
   const [isChatFocused] = useAtom(isChatFocusedAtom);
 
@@ -503,13 +523,14 @@ const Field = () => {
       // 값이 무조건 있다고 가정
       setFloorElements(data.field.floor);
       setPortals(data.field.portals);
+      setSkyFloors(data.field.skyFloors);
       setPlayerMapSize(data.mapSize);
     };
 
     fetchFieldData();
   }, [playerMap]);
 
-  const [playerAxis, setPlayerAxis] = useAtom(playerAxisAtom);
+  const [playerAxis] = useAtom(playerAxisAtom);
 
   const pressedKeys = useRef(new Set<string>());
 
@@ -564,6 +585,74 @@ const Field = () => {
     return () => clearInterval(interval);
   }, [playerAxis, portals, isChatFocused]);
 
+  useEffect(() => {
+    if (!playerAxis || !skyFloors) return;
+
+    const playerWidth = 70;
+    const playerHeight = 70;
+
+    const checkSkyFloorCollision = () => {
+      Object.values(skyFloors).forEach((skyFloor: any) => {
+        const sfX = skyFloor.x;
+        const sfY = skyFloor.y; // bottom 기준
+        const sfWidth = skyFloor.width;
+        const sfHeight = skyFloor.height;
+
+        // SkyFloor의 실제 top-left 좌표
+        const sfTop = sfY;
+        const sfBottom = sfY + sfHeight;
+
+        // console.log([sfTop, sfBottom, sfWidth, sfHeight]);
+
+        // 플레이어 top/bottom
+        const playerTop = playerAxis.y;
+        const playerBottom = playerAxis.y + playerHeight;
+
+        // console.log([playerTop, playerBottom]);
+
+        const isColliding =
+          playerAxis.x < sfX + sfWidth &&
+          playerAxis.x + playerWidth > sfX &&
+          playerBottom > sfTop &&
+          playerTop < sfBottom;
+
+        if (isColliding) {
+          const overlapX = playerAxis.x + playerWidth / 2 - (sfX + sfWidth / 2);
+          const overlapY =
+            playerAxis.y + playerHeight / 2 - (sfTop + sfHeight / 2);
+
+          const halfWidth = (playerWidth + sfWidth) / 2;
+          const halfHeight = (playerHeight + sfHeight) / 2;
+
+          const dx = halfWidth - Math.abs(overlapX);
+          const dy = halfHeight - Math.abs(overlapY);
+
+          if (dx < dy) {
+            // 좌우 충돌
+            if (overlapX > 0) {
+              updatePlayerLocation(playerId, "right", dx);
+            } else {
+              updatePlayerLocation(playerId, "left", dx);
+            }
+          } else {
+            // 위/아래 충돌
+            if (overlapY > 0) {
+              // 아래에서 충돌 → 점프 중단
+              // updatePlayerLocation(playerId, "jump", dy);
+              // isJumpingRef.current = false; // 점프 종료
+            } else {
+              // 위에서 충돌 → 머리 박힘
+              // updatePlayerLocation(playerId, "jump", dy);
+            }
+          }
+        }
+      });
+    };
+
+    const interval = setInterval(checkSkyFloorCollision, 16); // 60FPS
+    return () => clearInterval(interval);
+  }, [playerAxis, skyFloors]);
+
   const [cameraOffsetX, setCameraOffsetX] = useState(0);
 
   useEffect(() => {
@@ -586,12 +675,22 @@ const Field = () => {
 
   return (
     <CameraDiv offsetX={cameraOffsetX}>
-      <Floor height={floorElements.height} />
       <Players mapPlayers={mapPlayers} setMapPlayers={setMapPlayers} />
       {portals !== undefined &&
         Object.entries(portals).map(([location, portal]) => (
           <Portal key={location} x={portal.x} y={portal.y} />
         ))}
+      {skyFloors !== undefined &&
+        Object.entries(skyFloors).map(([key, skyFloor]) => (
+          <SkyFloor
+            key={key}
+            x={skyFloor.x}
+            y={skyFloor.y}
+            width={skyFloor.width}
+            height={skyFloor.height}
+          />
+        ))}
+      <Floor height={floorElements.height} />
     </CameraDiv>
   );
 };
@@ -797,10 +896,11 @@ const ArrowButton = styled.button`
 `;
 
 const MobileArrowPad = () => {
-  const isJumpingRef = useRef<boolean>(false);
   const [playerId] = useAtom(playerIdAtom);
   const [playerAxis] = useAtom(playerAxisAtom);
   const [floorElements] = useAtom(floorElementsAtom);
+
+  const isJumpingRef = useRef<boolean>(false);
 
   const jumpPlayer = async (playerId: string) => {
     let velocity = 8; // 초기 속도
@@ -823,7 +923,7 @@ const MobileArrowPad = () => {
   };
 
   const jump = async () => {
-    if (!isJumpingRef.current && playerAxis.y === floorElements.height) {
+    if (!isJumpingRef.current && (await isPlayerFloor(playerId))) {
       isJumpingRef.current = true;
       jumpPlayer(playerId);
     }
