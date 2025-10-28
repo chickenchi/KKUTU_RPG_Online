@@ -13,22 +13,9 @@ import {
 import { useAtom } from "jotai";
 import { isChatFocusedAtom } from "@/atoms/ui/ui";
 
-const GameBackgroundDiv = styled.div`
-  background-color: #516972;
-  position: relative;
-
-  width: 100%;
-  height: 100%;
-
-  overflow-x: hidden;
-  overflow-y: auto;
-`;
-
 export const Key = () => {
   const [isChatFocused] = useAtom(isChatFocusedAtom);
   const [playerId] = useAtom(playerIdAtom);
-  const [playerAxis] = useAtom(playerAxisAtom);
-  const [floorElements] = useAtom(floorElementsAtom);
 
   const pressedKeys = useRef(new Set<string>());
   const isJumpingRef = useRef(false);
@@ -86,10 +73,16 @@ export const Key = () => {
 
       const keyPress = async () => {
         // 좌우 이동
-        if (pressedKeys.current.has("ArrowLeft")) {
+        if (
+          pressedKeys.current.has("ArrowLeft") ||
+          pressedKeys.current.has("a")
+        ) {
           updatePlayerLocation(playerId, "left");
         }
-        if (pressedKeys.current.has("ArrowRight")) {
+        if (
+          pressedKeys.current.has("ArrowRight") ||
+          pressedKeys.current.has("d")
+        ) {
           updatePlayerLocation(playerId, "right");
         }
 
